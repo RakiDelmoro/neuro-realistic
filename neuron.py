@@ -56,9 +56,11 @@ class PyramidalNeuron(nn.Module):
         self.basal_synapses = torch.zeros(num_classes, basal_size, device='cuda')
         
     def training_phase(self, image, label):
-        basal_features = self.basal_encoder.encode(image)
-        # Bit OR operation
-        self.basal_synapses[label] = (self.basal_synapses[label].bool() | basal_features.flatten().bool()).float()
+        basal_features = self.basal_encoder.encode(image).flatten()
+
+            # Accumulate with learning rate
+        self.basal_synapses[label] += 0.01 * basal_features
+        self.basal_synapses[label] = torch.clamp(self.basal_synapses[label], 0, 1)
 
     def inference_phase(self, image):
         basal_features = self.basal_encoder.encode(image).flatten()
