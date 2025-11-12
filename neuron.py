@@ -55,13 +55,6 @@ class PyramidalNeuron(nn.Module):
 
         self.basal_encoder = BasalEncoder(input_size=image_size, output_size=basal_size, sparsity=0.03)
         self.basal_synapses = torch.zeros(num_classes, basal_size, device='cuda')
-
-        # Thresholds
-        self.basal_threshold = int(basal_size * 0.03 * 0.5)
-        self.neuron_threshold = 0.5
-
-    def nmda_activation(self, overlap, theta_seg):
-        return torch.sigmoid(self.alpha * (overlap - theta_seg))
         
     def training_phase(self, image, label):
         basal_features = self.basal_encoder.encode(image)
@@ -70,7 +63,6 @@ class PyramidalNeuron(nn.Module):
 
     def inference_phase(self, image):
         basal_features = self.basal_encoder.encode(image).flatten()
-        # Basal dendritic overlap for this label
         basal_overlap = torch.mv(self.basal_synapses, basal_features)
 
         return torch.argmax(basal_overlap).item()
