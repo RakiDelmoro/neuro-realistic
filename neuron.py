@@ -45,13 +45,12 @@ class ApicalEncoder:
         return self.encodings[label]
 
 class PyramidalNeuron(nn.Module):
-    def __init__(self, basal_size, image_size=784, num_classes=10, alpha=1.5):
+    def __init__(self, basal_size, image_size=784, num_classes=10):
         super().__init__()
 
         self.basal_size = basal_size
         self.image_size = image_size
         self.num_classes = num_classes
-        self.alpha = alpha
 
         self.basal_encoder = BasalEncoder(input_size=image_size, output_size=basal_size, sparsity=0.03)
         self.basal_synapses = torch.zeros(num_classes, basal_size, device='cuda')
