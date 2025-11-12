@@ -83,19 +83,18 @@ def training_runner():
             return self.layer2(self.layer1(input_x).relu())
 
     mlp = Mlp()
-    agent = PyramidalNeuron(basal_size=768, apical_size=768)
-    # agent = CorticalColumn(neurons_size=1024)
+    neuron = PyramidalNeuron(basal_size=10000)
 
     mlp_accuracies = []
     agent_accuracies = []
-    for epoch in range(1, 1001):
+    for epoch in range(100):
         mlp_train_loader = mnist_dataloader(train_images[:1000], train_labels[:1000], batch_size=1, shuffle=True)
         mlp_test_loader = mnist_dataloader(test_images[:100], test_labels[:100], batch_size=1, shuffle=False)
 
         agent_train_loader = mnist_dataloader(train_images[:1000], train_labels[:1000], batch_size=1, shuffle=True)
         agent_test_loader =  mnist_dataloader(test_images[:100], test_labels[:100], batch_size=1, shuffle=False)
 
-        agent_accuracy = agent.runner(agent_train_loader, agent_test_loader)
+        agent_accuracy = neuron.runner(agent_train_loader, agent_test_loader)
         mlp_accuracy = standard_mlp(mlp, mlp_train_loader, mlp_test_loader)
 
         mlp_accuracies.append(mlp_accuracy)
