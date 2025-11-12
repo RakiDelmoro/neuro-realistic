@@ -45,44 +45,35 @@ class ApicalEncoder:
         return self.encodings[label]
 
 class PyramidalNeuron(nn.Module):
-    def __init__(self, basal_size, apical_size, image_size=784, num_classes=10, alpha=1.5):
+    def __init__(self, basal_size, image_size=784, num_classes=10, alpha=1.5):
         super().__init__()
 
         self.basal_size = basal_size
-        self.apical_size = apical_size
         self.image_size = image_size
         self.num_classes = num_classes
         self.alpha = alpha
 
         self.basal_encoder = BasalEncoder(input_size=image_size, output_size=basal_size, sparsity=0.03)
-        self.apical_encoder = ApicalEncoder(num_categories=num_classes, output_size=apical_size, sparsity=0.03)
-
         self.basal_synapses = torch.zeros(num_classes, basal_size, device='cuda')
-        self.apical_synapses = torch.zeros(num_classes, apical_size, device='cuda')
 
         # Thresholds
         self.basal_threshold = int(basal_size * 0.03 * 0.5)
-        self.neuron_threshold = 1.0
+        self.neuron_threshold = 0.5
 
     def nmda_activation(self, overlap, theta_seg):
         return torch.sigmoid(self.alpha * (overlap - theta_seg))
         
     def training_phase(self, image, label):
         basal_features = self.basal_encoder.encode(image)
-        apical_features = self.apical_encoder.encode(label)
-
         # Bit OR operation
         self.basal_synapses[label] = (self.basal_synapses[label].bool() | basal_features.flatten().bool()).float()
-        self.apical_synapses[label] = (self.apical_synapses[label].bool() | apical_features.flatten().bool()).float()
 
     def inference_phase(self, image):
-        basal_features = self.basal_encoder.encode(image).flatten(0)
+        basal_features = self.basal_encoder.encode(image).flatten()
+        # Basal dendritic overlap for this label
+        basal_overlap = torch.mv(self.basal_synapses, basal_features)
 
-        overlaps = torch.mv(self.basal_synapses, basal_features)
-        neuron_firing_rate = self.nmda_activation(overlaps, self.basal_threshold)
-
-        predicted = torch.argmax(neuron_firing_rate).item()
-        return predicted
+        return torch.argmax(basal_overlap).item()
 
     def runner(self, train_loader, test_loader):
         for train_image, train_label in train_loader:
