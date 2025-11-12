@@ -87,12 +87,12 @@ def training_runner():
 
     mlp_accuracies = []
     agent_accuracies = []
-    for epoch in range(100):
-        mlp_train_loader = mnist_dataloader(train_images[:1000], train_labels[:1000], batch_size=1, shuffle=True)
-        mlp_test_loader = mnist_dataloader(test_images[:100], test_labels[:100], batch_size=1, shuffle=False)
+    for epoch in range(1):
+        mlp_train_loader = mnist_dataloader(train_images, train_labels, batch_size=1, shuffle=True)
+        mlp_test_loader = mnist_dataloader(test_images, test_labels, batch_size=1, shuffle=False)
 
-        agent_train_loader = mnist_dataloader(train_images[:1000], train_labels[:1000], batch_size=1, shuffle=True)
-        agent_test_loader =  mnist_dataloader(test_images[:100], test_labels[:100], batch_size=1, shuffle=False)
+        agent_train_loader = mnist_dataloader(train_images, train_labels, batch_size=1, shuffle=True)
+        agent_test_loader =  mnist_dataloader(test_images, test_labels, batch_size=1, shuffle=False)
 
         agent_accuracy = neuron.runner(agent_train_loader, agent_test_loader)
         mlp_accuracy = standard_mlp(mlp, mlp_train_loader, mlp_test_loader)
@@ -100,7 +100,7 @@ def training_runner():
         mlp_accuracies.append(mlp_accuracy)
         agent_accuracies.append(agent_accuracy)
 
-        print(f'EPOCH: {epoch}: MLP: {mlp_accuracy} AGENT: {agent_accuracy}')
+        print(f'EPOCH: {epoch}: Mlp: {mlp_accuracy} Neuron: {agent_accuracy}')
 
         # After training completes:
         plot_training_progress(mlp_accuracies, agent_accuracies, 'training_progress_v2.png')
