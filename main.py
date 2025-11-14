@@ -14,6 +14,7 @@ def plot_training_progress(mlp_accuracies, agent_accuracies, filename='training_
     plt.xlabel('Epoch')
     plt.ylabel('Accuracy (%)')
     plt.title('Training Progress: Accuracy per Epoch')
+    plt.ylim(0, 1)
     plt.legend()
     plt.grid(True)
     plt.tight_layout()
@@ -38,41 +39,39 @@ def mnist_dataloader(img_arr, label_arr, batch_size, shuffle):
 
         yield batched_img, batched_label
 
-def standard_mlp(model, train_loader, test_loader):
+def standard_mlp(model, train_loader=None, test_loader=None, train=True):
     loss_fn = torch.nn.CrossEntropyLoss()
     optimizer = torch.optim.AdamW(model.parameters(), lr=0.001)
 
-    # Training
-    for train_image, train_label in train_loader:
-        image = torch.tensor(train_image, device='cuda')
-        label = torch.tensor(train_label, device='cuda')
+    if train and train_loader is not None:
+        # Training
+        for train_image, train_label in train_loader:
+            image = torch.tensor(train_image, device='cuda')
+            label = torch.tensor(train_label, device='cuda')
 
-        model_pred = model(image)
-        loss = loss_fn(model_pred, label)
+            model_pred = model(image)
+            loss = loss_fn(model_pred, label)
+        
+            optimizer.zero_grad()
+            loss.backward()
+            optimizer.step()
     
-        optimizer.zero_grad()
-        loss.backward()
-        optimizer.step()
+    if not train and test_loader is not None:
+        correctness = []
+        for test_image, test_label in test_loader:
+            test_image = torch.tensor(test_image, device='cuda')
+            test_label = torch.tensor(test_label, device='cuda')
 
-    correctness = []
-    for test_image, test_label in test_loader:
-        test_image = torch.tensor(test_image, device='cuda')
-        test_label = torch.tensor(test_label, device='cuda')
+            model_pred = model(test_image).argmax(dim=-1).item()
+            correctness.append(model_pred == test_label.item())
 
-        model_pred = model(test_image).argmax(dim=-1).item()
-        correctness.append(model_pred == test_label.item())
-
-    return sum(correctness) / len(correctness)
+        return sum(correctness) / len(correctness)
 
 
 def training_runner():
-    IMAGE_HEIGHT = 28
-    IMAGE_WIDTH = 28
-
-    with open('./dataset/mnist.pkl', 'rb') as f: ((train_images, train_labels), (test_images, test_labels), _) = pickle.load(f, encoding='latin1')
-    assert train_images.shape[0] == train_labels.shape[0]
-    assert test_images.shape[0] == test_labels.shape[0]
-    assert train_images.shape[1] == test_images.shape[1] == IMAGE_HEIGHT*IMAGE_WIDTH
+    # Load datasets
+    with open('./dataset/mnist-digits.pkl', 'rb') as f: ((train_digit_images, train_digit_labels), (test_digit_images, test_digit_labels), _) = pickle.load(f, encoding='latin1')
+    with open('./dataset/mnist-fashion.pkl', 'rb') as f: ((train_fashion_images, train_fashion_labels), (test_fashion_images, test_fashion_labels), _) = pickle.load(f, encoding='latin1')
 
     class Mlp(torch.nn.Module):
         def __init__(self):
@@ -87,22 +86,39 @@ def training_runner():
 
     mlp_accuracies = []
     agent_accuracies = []
-    for epoch in range(1):
-        mlp_train_loader = mnist_dataloader(train_images, train_labels, batch_size=1, shuffle=True)
-        mlp_test_loader = mnist_dataloader(test_images, test_labels, batch_size=1, shuffle=False)
+    for epoch in range(1, 101):
+        # mnist-digit loaders
+        digit_train_loader = mnist_dataloader(train_digit_images, train_digit_labels, batch_size=1, shuffle=True)
+        digit_test_loader = mnist_dataloader(test_digit_images, test_digit_labels, batch_size=1, shuffle=False)
+        # mnist-fashion loaders
+        fashion_train_loader = mnist_dataloader(train_fashion_images, train_fashion_labels, batch_size=1, shuffle=True)
+        fashion_test_loader = mnist_dataloader(test_fashion_images, test_fashion_labels, batch_size=1, shuffle=False)
+        # # MLP train and test
+        standard_mlp(model=mlp, train_loader=digit_train_loader, train=True)
+        standard_mlp(model=mlp, train_loader=fashion_train_loader, train=True)
+        digit_mlp_accuracy = standard_mlp(model=mlp, test_loader=digit_test_loader, train=False)
+        fashion_mlp_accuracy = standard_mlp(model=mlp, test_loader=fashion_test_loader, train=False)
 
-        agent_train_loader = mnist_dataloader(train_images, train_labels, batch_size=1, shuffle=True)
-        agent_test_loader =  mnist_dataloader(test_images, test_labels, batch_size=1, shuffle=False)
+        # # mnist-digit loaders
+        digit_train_loader = mnist_dataloader(train_digit_images, train_digit_labels, batch_size=1, shuffle=True)
+        digit_test_loader = mnist_dataloader(test_digit_images, test_digit_labels, batch_size=1, shuffle=False)
+        # mnist-fashion loaders
+        fashion_train_loader = mnist_dataloader(train_fashion_images, train_fashion_labels, batch_size=1, shuffle=True)
+        fashion_test_loader = mnist_dataloader(test_fashion_images, test_fashion_labels, batch_size=1, shuffle=False)
+        # Neuron train and test
+        neuron.runner(train_loader=fashion_train_loader, train=True)
+        neuron.runner(train_loader=digit_train_loader, train=True)
+        digit_neuron_accuracy = neuron.runner(test_loader=digit_test_loader, train=False)
+        fashion_neuron_accuracy = neuron.runner(test_loader=fashion_test_loader, train=False)
 
-        agent_accuracy = neuron.runner(agent_train_loader, agent_test_loader)
-        mlp_accuracy = standard_mlp(mlp, mlp_train_loader, mlp_test_loader)
+        print(f'EPOCH: {epoch}: MLP Digit: {digit_mlp_accuracy} MLP Fashion: {fashion_mlp_accuracy} Neuron Digit: {digit_neuron_accuracy} Neuron Fashion: {fashion_neuron_accuracy}')
+        
+        # mlp_accuracies.append(mlp_accuracy)
+        # agent_accuracies.append(agent_accuracy)
 
-        mlp_accuracies.append(mlp_accuracy)
-        agent_accuracies.append(agent_accuracy)
+        # print(f'EPOCH: {epoch}: Mlp: {mlp_accuracy} Neuron: {agent_accuracy}')
 
-        print(f'EPOCH: {epoch}: Mlp: {mlp_accuracy} Neuron: {agent_accuracy}')
-
-        # After training completes:
-        plot_training_progress(mlp_accuracies, agent_accuracies, 'training_progress_v2.png')
+        # # After training completes:
+        # plot_training_progress(mlp_accuracies, agent_accuracies, 'training_progress_v2.png')
 
 training_runner()
