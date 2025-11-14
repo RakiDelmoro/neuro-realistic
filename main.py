@@ -82,7 +82,7 @@ def training_runner():
             return self.layer2(self.layer1(input_x).relu())
 
     mlp = Mlp()
-    neuron = PyramidalNeuron(basal_size=10000)
+    neuron = PyramidalNeuron(basal_size=80000)
 
     mlp_accuracies = []
     agent_accuracies = []
@@ -106,8 +106,8 @@ def training_runner():
         fashion_train_loader = mnist_dataloader(train_fashion_images, train_fashion_labels, batch_size=1, shuffle=True)
         fashion_test_loader = mnist_dataloader(test_fashion_images, test_fashion_labels, batch_size=1, shuffle=False)
         # Neuron train and test
-        neuron.runner(train_loader=fashion_train_loader, train=True)
         neuron.runner(train_loader=digit_train_loader, train=True)
+        neuron.runner(train_loader=fashion_train_loader, train=True)
         digit_neuron_accuracy = neuron.runner(test_loader=digit_test_loader, train=False)
         fashion_neuron_accuracy = neuron.runner(test_loader=fashion_test_loader, train=False)
 
