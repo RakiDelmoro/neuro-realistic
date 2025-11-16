@@ -10,24 +10,41 @@ class PyramidalNeuron(nn.Module):
         self.num_classes = num_classes
         self.sparsity = sparsity
 
-        # Initialize synapses 0.3 to 0.7
-        self.basal_synapses =  torch.zeros(num_classes, basal_size, device='cuda')
+        self.basal_synapses =  torch.rand(num_classes, basal_size, device='cuda') * 0.01
+        self.threshold = 0.5 * self.sparsity * self.basal_size
+
+        # Add learning rate parameters
+        self.lr_potentiation = 0.01  # For target class
+        self.lr_depression = 0.001   # For non-target classes
 
     def basal_encoder(self, image):
         basal_features = torch.zeros(1, self.basal_size, device=image.device)
-        active_indices = torch.where(image > 0.7)[1]
-        basal_features[:, active_indices] = 1.0
-
+        
+        # Get active pixels from image
+        active_pixels = torch.where(image > 0.5)[1]
+        
+        # Randomly map to basal dendrites (with modulo to stay in bounds)
+        if len(active_pixels) > 0:
+            basal_indices = active_pixels % self.basal_size  # Wrap around
+            basal_features[:, basal_indices] = 1.0
+        
         return basal_features
 
     def plasticity(self, basal_features, label):
-        # Union sdr Bitwise OR to label and exclude to other union
+        basal_flat = basal_features.flatten()
+        
+        # Potentiation for correct class (Hebbian learning)
+        self.basal_synapses[label] += self.lr_potentiation * basal_flat
+        
+        # Gentler depression for incorrect classes
         for each in range(self.num_classes):
-            if each == label:
-                self.basal_synapses[each] = (self.basal_synapses[label].bool() | basal_features.bool()).float()
-            # else:
-            #     # Exclude basal_features from other unions using AND NOT
-            #     self.basal_synapses[each] = (self.basal_synapses[each].bool() & ~basal_features.bool()).float()
+            if each != label:
+                # Only depress where there's overlap
+                overlap = self.basal_synapses[each] * basal_flat
+                self.basal_synapses[each] -= self.lr_depression * overlap
+        
+        # Normalize to prevent unbounded growth
+        self.basal_synapses.clamp_(0.0, 1.0)
 
     def training_phase(self, image, label):
         basal_features = self.basal_encoder(image)
@@ -36,14 +53,7 @@ class PyramidalNeuron(nn.Module):
     def inference_phase(self, image):
         basal_features = self.basal_encoder(image)
         
-        # Calculate overlap with each union
-        overlaps = torch.zeros(self.num_classes)
-        for each in range(self.num_classes):
-            # Count how many active bits match (intersection)
-            overlap = (basal_features.bool() & self.basal_synapses[each].bool()).sum()
-            overlaps[each] = overlap
-        
-        # Predict the class with maximum overlap
+        overlaps = (self.basal_synapses * basal_features).sum(dim=1)
         predicted_label = torch.argmax(overlaps)
         
         return predicted_label
