@@ -3,83 +3,70 @@ import torch.nn as nn
 import torch.nn.functional as F
 from PIL import Image
 
-class PyramidalNeuron(nn.Module):
-    def __init__(self, in_dim=784, dentritic_branch=28, branch_synapses=28):
+class Neuron(nn.Module):
+    def __init__(self, in_dim=784, dentritic_branch=28, synapse_per_branch=28, learning_rate=0.01):
         super().__init__()
 
         self.in_dim = in_dim
-        self.branches = dentritic_branch
-        self.branch_size = branch_synapses
-        self.branches_synapses = torch.zeros(dentritic_branch, branch_synapses, device='cuda')
+        self.dentritic_branch = dentritic_branch
+        self.synapse_per_branch = synapse_per_branch
+        self.lr = learning_rate
+        self.dentrites = torch.stack([torch.exp(torch.randn(synapse_per_branch, device='cuda') * 0.9 - 2.0) for _ in range(dentritic_branch)], dim=0)
     
-    def plasticity(self, sensory_input):
-        sensory_input = (sensory_input > 0.5).float()
-        sensory_input = sensory_input.view(self.branches, self.branch_size)
+    def dentritic_branch_propagate(self, basal_features, learn=True, correct_label=None):
+        basal_features = (basal_features > 0.0).float()
+        basal_features = basal_features.view(self.dentritic_branch, self.synapse_per_branch)
 
-        for branch in range(self.branches):
-            branch_synapses = self.branches_synapses[branch]
-            active_sensory_input = torch.where(sensory_input[branch] > 0)[0]
+        dentrites_activation = []
+        for branch in range(self.dentritic_branch):
+            basal_input = basal_features[branch]
+            dentritic_synapse = self.dentrites[branch]
+            activation = torch.tanh(basal_input @ dentritic_synapse)
+            branch_fired = activation > 0.7
 
-            branch_synapses[active_sensory_input] = 1
+            if learn:
+                if branch_fired:
+                    if correct_label:
+                        dentritic_synapse.data += 0.001 * basal_input
+                    else:
+                        dentritic_synapse.data -= 0.001 * basal_input
+                else:
+                    if correct_label:
+                        dentritic_synapse.data += 0.001 * basal_input * 0.1
+                continue
 
-    def propagate_to_soma(self, basal_features):
-        basal_features = basal_features.view(self.branches, self.branch_size)
-        soma_rate = 0
-        for branch in range(self.branches):
-            feature = torch.where(basal_features[branch] > 0)[0]
-            synapse = torch.where(self.branches_synapses[branch] > 0)[0]
-            correctness = len(synapse) - len(feature)
-            soma_rate += correctness
-
-        return soma_rate
+            dentrites_activation.append(activation)
         
-class Neurons(nn.Module):
+        neuron_activation = None if len(dentrites_activation) == 0 else torch.tanh(torch.stack(dentrites_activation).sum())
+        return neuron_activation
+        
+class PyramidalNeurons(nn.Module):
     def __init__(self, num_neurons=10):
         super().__init__()
-        self.neurons = [PyramidalNeuron() for _ in range(num_neurons)]
-        # Track which digits each neuron has been trained on
-        self.trained_digits = [set() for _ in range(num_neurons)]
-        
-    def training_phase(self, image, label):
-        """
-        Returns True if training should continue, False if all neurons have seen all digits
-        """
-        image = image.flatten()
-        label_item = label.item()
-        
-        neuron = self.neurons[label_item]
-        
-        # Only train if this neuron hasn't seen this digit yet
-        if label_item not in self.trained_digits[label_item]:
-            neuron.plasticity(image)
-            self.trained_digits[label_item].add(label_item)
-        
-        # Check if all neurons have been trained on all digits
-        return not self.is_training_complete()
-    
-    def is_training_complete(self):
-        """
-        Check if each neuron has been trained on all digits 0-9
-        """
-        for digit_set in self.trained_digits:
-            if len(digit_set) < 10:
-                return False
-        return True
+        self.num_neurons = num_neurons
+        self.neurons = [Neuron() for _ in range(num_neurons)]
 
     def print_neurons_synapses(self):
         for i, neuron in enumerate(self.neurons):
-            synapses = neuron.branches_synapses.cpu().numpy().astype('uint8')
+            synapses = neuron.dentrites.cpu().numpy().astype('uint8')
             synapses_img = synapses * 255
             img = Image.fromarray(synapses_img)
             img.save(f"./neurons-synapses/neuron {i}.png")
 
-    def inference_phase(self, image):
-        basal_features = (image > 0.5).float()
+    def training_phase(self, image, label):
+        image = image.flatten()
 
+        for idx in range(self.num_neurons):
+            if idx == label.item():
+                self.neurons[idx].dentritic_branch_propagate(image, correct_label=True)
+            else:
+                self.neurons[idx].dentritic_branch_propagate(image, correct_label=False)
+
+    def inference_phase(self, image):
+        image = image.flatten()
         neurons_firing = []
         for neuron in self.neurons:
-            synapses = neuron.branches_synapses.flatten()
-            firing_rate = (basal_features * synapses).sum()
+            firing_rate = neuron.dentritic_branch_propagate(image, learn=False)
             neurons_firing.append(firing_rate.item())
         
         return torch.tensor(neurons_firing).argmax()
@@ -106,6 +93,6 @@ class Neurons(nn.Module):
 
 # x = torch.randn(784, device='cuda')
 # y = torch.randint(0, 10, size=(1,))
-# model = Neurons()
+# model = PyramidalNeurons()
 # print(model.training_phase(x, y))
 # print(model.inference_phase(x))
